@@ -1,6 +1,5 @@
 {
   "action": "run.start",
   "run_id": "run_demo",
-  "context": { "note": "Hello from the template PDP" }
+  "context": { "note": "Hello from JARVIS PDP" }
 }
-

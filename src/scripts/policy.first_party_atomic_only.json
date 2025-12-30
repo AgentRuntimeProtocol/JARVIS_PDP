@@ -1,0 +1,28 @@
+{
+  "Version": "0.1.0",
+  "Statement": [
+    {
+      "Sid": "AllowCompositeNodes",
+      "Effect": "Allow",
+      "Action": ["run.start", "node.run.execute"],
+      "Resource": "node_type:*",
+      "Condition": {
+        "StringEquals": {
+          "node_type.kind": "composite"
+        }
+      }
+    },
+    {
+      "Sid": "AllowFirstPartyAtomicNodes",
+      "Effect": "Allow",
+      "Action": ["run.start", "node.run.execute"],
+      "Resource": "node_type:*",
+      "Condition": {
+        "StringEquals": {
+          "node_type.kind": "atomic",
+          "node_type.jarvis.trust_tier": "first_party"
+        }
+      }
+    }
+  ]
+}
