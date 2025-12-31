@@ -42,7 +42,7 @@ class _DummyNodeRegistry:
         return self._node_type
 
 
-def _pdp_request_for_node(*, node_type_id: str, version: str = "0.3.1") -> PdpDecidePolicyRequest:
+def _pdp_request_for_node(*, node_type_id: str, version: str = "0.3.3") -> PdpDecidePolicyRequest:
     return PdpDecidePolicyRequest(
         body=PolicyDecisionRequest(
             action="node.run.execute",
@@ -87,7 +87,7 @@ def test_first_party_atomic_only_policy(
     extensions: dict[str, Any] = {"jarvis.trust_tier": trust_tier} if trust_tier is not None else {}
     node_type = NodeType(
         node_type_id="jarvis.web.fetch" if kind == "atomic" else "jarvis.composite.planner.general",
-        version="0.3.1",
+        version="0.3.3",
         kind=NodeKind(kind),
         extensions=Extensions.model_validate(extensions) if extensions else None,
     )
