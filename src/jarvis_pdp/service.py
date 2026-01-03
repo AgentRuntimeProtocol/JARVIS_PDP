@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
@@ -24,6 +25,8 @@ from arp_standard_server import ArpServerError
 from . import __version__
 from .clients import NodeRegistryGatewayClient
 from .utils import now
+
+logger = logging.getLogger(__name__)
 
 
 class PdpService(BasePdpServer):
@@ -117,10 +120,19 @@ class PdpService(BasePdpServer):
         return Policy.load(path)
 
     async def _decide(self, request: PolicyDecisionRequest) -> PolicyDecision:
+        logger.info(
+            "Policy decision requested (action=%s, run_id=%s, node_run_id=%s, node_type_id=%s)",
+            request.action,
+            request.run_id,
+            request.node_run_id,
+            request.node_type_ref.node_type_id if request.node_type_ref else None,
+        )
         profile = (os.environ.get("JARVIS_POLICY_PROFILE") or "").strip().lower()
         if profile == "dev-allow":
+            logger.info("Policy decision dev-allow (action=%s)", request.action)
             return PolicyDecision(decision=PolicyDecisionOutcome.allow, reason_code="dev_allow")
         if profile and profile not in {"dev-allow"}:
+            logger.warning("Policy profile unsupported (profile=%s)", profile)
             return PolicyDecision(
                 decision=PolicyDecisionOutcome.deny,
                 reason_code="invalid_policy_profile",
@@ -135,15 +147,23 @@ class PdpService(BasePdpServer):
             try:
                 policy = self._load_policy(policy_path)
             except PolicyError as exc:
+                logger.warning("Policy load failed (path=%s, error=%s)", policy_path, exc)
                 return PolicyDecision(
                     decision=PolicyDecisionOutcome.deny,
                     reason_code="invalid_policy",
                     message=str(exc),
                 )
+            logger.info(
+                "Policy loaded (path=%s, hash=%s, version=%s)",
+                policy_path,
+                policy.policy_hash,
+                policy.version,
+            )
             enforcer = Enforcer(policy)
             context = self._build_context(request)
             if request.node_type_ref:
                 if self._node_registry is None:
+                    logger.warning("Policy requires Node Registry but it is not configured")
                     return PolicyDecision(
                         decision=PolicyDecisionOutcome.deny,
                         reason_code="node_registry_unconfigured",
@@ -155,12 +175,18 @@ class PdpService(BasePdpServer):
                         request.node_type_ref.version,
                     )
                 except ArpServerError as exc:
+                    logger.warning(
+                        "NodeType metadata lookup failed (code=%s, node_type_id=%s)",
+                        exc.code,
+                        request.node_type_ref.node_type_id,
+                    )
                     return PolicyDecision(
                         decision=PolicyDecisionOutcome.deny,
                         reason_code=exc.code,
                         message="NodeType metadata lookup failed",
                     )
                 except Exception:
+                    logger.exception("NodeType metadata lookup failed")
                     return PolicyDecision(
                         decision=PolicyDecisionOutcome.deny,
                         reason_code="node_type_metadata_unavailable",
@@ -170,6 +196,13 @@ class PdpService(BasePdpServer):
             resource = self._resolve_resource(request, context)
             decision = enforcer.authorize(request.action, resource, context)
             outcome = PolicyDecisionOutcome.allow if decision.allowed else PolicyDecisionOutcome.deny
+            logger.info(
+                "Policy decision computed (action=%s, resource=%s, decision=%s, reason=%s)",
+                request.action,
+                resource,
+                outcome.value if hasattr(outcome, "value") else outcome,
+                decision.reason,
+            )
             return PolicyDecision(
                 decision=outcome,
                 reason_code=decision.reason,
@@ -181,14 +214,17 @@ class PdpService(BasePdpServer):
 
         legacy_mode = (os.environ.get("ARP_POLICY_MODE") or "").strip().lower()
         if legacy_mode == "allow_all":
+            logger.info("Policy legacy allow_all in effect")
             return PolicyDecision(decision=PolicyDecisionOutcome.allow, reason_code="allow_all")
         if legacy_mode == "file":
+            logger.warning("Policy legacy file mode missing policy path")
             return PolicyDecision(
                 decision=PolicyDecisionOutcome.deny,
                 reason_code="missing_policy_path",
                 message="ARP_POLICY_PATH or JARVIS_POLICY_PATH is required when ARP_POLICY_MODE=file",
             )
 
+        logger.warning("Policy unconfigured; denying by default")
         return PolicyDecision(
             decision=PolicyDecisionOutcome.deny,
             reason_code="policy_unconfigured",
