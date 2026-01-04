@@ -238,17 +238,18 @@ def test_service_build_context_run_context_branch(monkeypatch: pytest.MonkeyPatc
 
 
 def test_main_invokes_uvicorn_reload_and_non_reload(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[tuple[Any, str, int, bool]] = []
+    calls: list[tuple[Any, str, int, bool, Any]] = []
 
-    def _fake_run(app: Any, *, host: str, port: int, reload: bool) -> None:
-        calls.append((app, host, port, reload))
+    def _fake_run(app: Any, *, host: str, port: int, reload: bool, **kwargs: Any) -> None:
+        calls.append((app, host, port, reload, kwargs.get("log_config")))
 
     monkeypatch.setattr(pdp_main.uvicorn, "run", _fake_run)
 
     # Reload path: uses "jarvis_pdp.app:app" import string.
     monkeypatch.setattr(sys, "argv", ["arp-jarvis-pdp", "--host", "0.0.0.0", "--port", "1234", "--reload"])
     pdp_main.main()
-    assert calls[-1] == ("jarvis_pdp.app:app", "0.0.0.0", 1234, True)
+    assert calls[-1][:4] == ("jarvis_pdp.app:app", "0.0.0.0", 1234, True)
+    assert calls[-1][4] is pdp_main.LOG_CONFIG
 
     # Non-reload path: builds the app object and passes it to uvicorn.
     pdp_app = _import_app_dev_insecure(monkeypatch)
@@ -256,4 +257,5 @@ def test_main_invokes_uvicorn_reload_and_non_reload(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(pdp_app, "create_app", lambda: sentinel)
     monkeypatch.setattr(sys, "argv", ["arp-jarvis-pdp", "--host", "0.0.0.0", "--port", "2345"])
     pdp_main.main()
-    assert calls[-1] == (sentinel, "0.0.0.0", 2345, False)
+    assert calls[-1][:4] == (sentinel, "0.0.0.0", 2345, False)
+    assert calls[-1][4] is pdp_main.LOG_CONFIG
